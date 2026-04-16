@@ -1,0 +1,22 @@
+bball_model = data.dropna(subset=["launch_speed", "launch_angle"]).copy()
+bball_model["bb_type"] = bball_model["bb_type"].fillna("Unknown")
+
+for col in bball_model.columns:
+    if bball_model[col].nunique() <= 1:
+        bball_model = bball_model.drop(columns=[col])
+
+cols_to_drop = ["bip_id", "batter_id", "pitcher_id", "batter_name", "pitcher_name"]
+bball_model = bball_model.drop(columns=cols_to_drop, errors="ignore")
+
+X = bball_model.drop(columns=["is_home_run"])
+y = bball_model["is_home_run"]
+
+X = pd.get_dummies(X, drop_first=True)
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.3, random_state=42
+)
+
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
