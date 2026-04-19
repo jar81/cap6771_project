@@ -1,0 +1,152 @@
+import sys
+import os
+import pandas as pd
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+# Required for adding MySQL needed libraries
+'''
+!python3 -m pip install mysql-connector-python sqlalchemy pandas
+!python3 -m pip install mysql-connector-python
+!{sys.executable} -m pip install mysql-connector-python
+'''
+
+import mysql.connector as sql
+
+from sqlalchemy import create_engine
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVC # For SVM
+from sklearn.ensemble import RandomForestRegressor # For Random Forest
+from sklearn.inspection import permutation_importance
+from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import confusion_matrix, accuracy_score, classification_report, roc_curve, auc
+
+# Connecting to MySQL and loading data into
+conn = sql.connect(
+    host="localhost",
+    user="root",
+    password="",
+    database="cap4770"
+)
+
+engine = create_engine("mysql+mysqlconnector://root:@localhost/cap4770")
+
+df_csv = pd.read_csv("baseball.csv") # Changed name of train file; same folder as notebook 
+
+df_csv.to_sql("baseball", con=engine, if_exists="replace", index=False)
+
+pd.read_sql("SHOW TABLES", engine) # Confirm dataset loaded in MySQL
+pd.read_sql("SELECT COUNT(*) AS total_rows FROM baseball", engine)
+
+# Collection; change to loading from MySQL
+baseball = pd.read_csv("baseball.csv") #Renamed train_clean, remove with MySQL working
+
+# Prepocessing
+
+# Drop columns/values
+baseball = baseball.dropna(subset=["launch_speed","launch_angle"]).copy()
+baseball["bb_type"] = baseball["bb_type"].fillna("Unknown")
+for col in baseball.columns:
+    if baseball[col].nunique() <= 1:
+        baseball = baseball.drop(columns=[col])
+
+cols_to_drop = ["bip_id", "batter_id", "pitcher_id", "batter_name", "pitcher_name"]
+baseball = baseball.drop(columns=cols_to_drop, errors="ignore")
+
+X = baseball.drop(columns=["is_home_run"])
+y = baseball["is_home_run"]
+
+# One-Hot Encoding (required for SVM)
+X = pd.get_dummies(X,drop_first=True)
+
+# Split 70% train, 30% test
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.3
+)
+
+# Standardization (required for SVM)
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+# Exploration
+data = pd.read_csv("baseball.csv") # Replace with MySQL or data already loaded
+print("Original Data:\n",data.head())
+print(data.info())
+print("Original Instances, Features:",data.shape)
+print("Original Duplicates:",data.duplicated().sum())
+print("Original Nulls:\n",data.isna().sum())
+
+print("\nProcessed Data:")
+print(baseball.info()) # Showing modified/processed data 
+print("Instances, Features:",baseball.shape)
+print("Duplicates:",baseball.duplicated().sum())
+print("Nulls:\n",baseball.isna().sum())
+
+
+# SVM Model
+# kernels, class_weight, random_state
+svmModel = SVC(kernel='rbf', class_weight='balanced')
+svmModel.fit(X_train_scaled, y_train)
+
+# SVM Prediction
+y_pred = svmModel.predict(X_test_scaled)
+
+# SVM Confusion Matrix
+conf_matrix = confusion_matrix(y_test, y_pred)
+print("SVM Confusion Matrix:\n",conf_matrix)
+
+# SVM Accuracy
+print("\nSVM Accuracy:",accuracy_score(y_test, y_pred))
+
+# SVM Classification
+print("SVM Report:\n",classification_report(y_test,y_pred))
+
+# SVM ROC and AUC
+y_scores = svmModel.decision_function(X_test_scaled)
+fpr, tpr, _ = roc_curve(y_test, y_scores)
+roc_auc = auc(fpr, tpr)
+
+#SVM ROC/AUC Plot
+plt.plot(fpr, tpr, label=f"AUC = {roc_auc:.2f}")
+plt.plot([0,1], [0,1], '--')
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.title("ROC Curve (SVM)")
+plt.legend()
+plt.show()
+
+# SVM Cross Validation
+# cv, 
+CVscores = cross_val_score(svmModel, X_train_scaled, y_train, cv=5)
+
+print("SVM CV Scores:", CVscores)
+print("SVM CV Mean:", CVscores.mean())
+
+# Random Forest Model
+# n_estimators (100), any number 
+# criterion (class ="gini" reg="squared_error"),
+    # class = "entropy", "log_loss"
+    # reg = "absolute_error", "friedman_mse", "poisson"
+# random_state (None), any number
+# max_depth (None), None = prune based on min_samples_split, any number
+# min_samples_split (2), any number or float
+# max_features ("sqrt"), any number, "log2"
+
+rfModel = RandomForestRegressor()
+rfModel.fit(X,y) # May need to ignore warnings
+
+# Random Forest Accuracy 
+rfScore = rfModel.score(X,y)
+print("Random Forest Accuracy =", rfScore,"\n")
+
+# Permutation importance with default parameters (can choose random_state)
+rfResult = permutation_importance(rfModel,X,y)
+
+# Variable importance table
+importance_table = pd.DataFrame(
+    data={"Feature": rfModel.feature_names_in_,"permutation importance": rfResult.importances_mean}
+).sort_values("permutation importance", ascending=False)
+print("Random Forest Feature Importance\n",importance_table.head(10)) # Top 10 features
