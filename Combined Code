@@ -16,12 +16,16 @@ import mysql.connector as sql
 
 from sqlalchemy import create_engine
 from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC # For SVM
 from sklearn.ensemble import RandomForestRegressor # For Random Forest
 from sklearn.inspection import permutation_importance
 from sklearn.model_selection import GridSearchCV
-from sklearn.metrics import confusion_matrix, accuracy_score, classification_report, roc_curve, auc
+from sklearn.metrics import confusion_matrix, accuracy_score, classification_report 
+from sklearn.metrics import roc_curve, auc, precision_score, recall_score, f1_score
+from sklearn.metrics import roc_auc_score
+
 
 # Connecting to MySQL and loading data into
 conn = sql.connect(
