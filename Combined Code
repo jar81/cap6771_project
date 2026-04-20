@@ -59,7 +59,7 @@ for col in baseball.columns:
     if baseball[col].nunique() <= 1:
         baseball = baseball.drop(columns=[col])
 
-cols_to_drop = ["bip_id", "batter_id", "pitcher_id", "batter_name", "pitcher_name"]
+cols_to_drop = ["bip_id", "batter_id", "pitcher_id", "batter_name", "pitcher_name", "game_date"]
 baseball = baseball.drop(columns=cols_to_drop, errors="ignore")
 
 X = baseball.drop(columns=["is_home_run"])
