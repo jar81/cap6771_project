@@ -32,7 +32,7 @@ conn = sql.connect(
     host="localhost",
     user="root",
     password="",
-    database="cap4770"
+    database="cap6771"
 )
 
 engine = create_engine("mysql+mysqlconnector://root:@localhost/cap4770")
