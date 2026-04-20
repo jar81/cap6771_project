@@ -28,6 +28,7 @@ from sklearn.metrics import roc_auc_score
 
 
 # Connecting to MySQL and loading data into
+
 conn = sql.connect(
     host="localhost",
     user="root",
@@ -35,18 +36,19 @@ conn = sql.connect(
     database="cap6771"
 )
 
-engine = create_engine("mysql+mysqlconnector://root:@localhost/cap4770")
+print(conn.is_connected())
 
-df_csv = pd.read_csv("baseball.csv") # Changed name of train file; same folder as notebook 
+engine = create_engine("mysql+mysqlconnector://root:@localhost/cap6771")
+
+df_csv = pd.read_csv("/Users/luismadrigal/Downloads/archive/train.csv")
 
 df_csv.to_sql("baseball", con=engine, if_exists="replace", index=False)
 
 pd.read_sql("SHOW TABLES", engine) # Confirm dataset loaded in MySQL
 pd.read_sql("SELECT COUNT(*) AS total_rows FROM baseball", engine)
 
-# Collection; change to loading from folder to MySQL
-baseball = pd.read_csv("baseball.csv") #Renamed train_clean, remove with MySQL working
-# baseball = pd.read_sql("SELECT * FROM baseball", engine)
+# Collection; change to loading from MySQL
+baseball = pd.read_sql("SELECT * FROM baseball", engine) #Renamed train_clean, remove with MySQL working
 
 # Prepocessing
 
@@ -77,7 +79,7 @@ X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
 
 # Exploration
-data = pd.read_csv("baseball.csv") # Replace with MySQL or data already loaded
+data = pd.read_sql("SELECT * FROM baseball", engine)
 print("Original Data:\n",data.head())
 print(data.info())
 print("Original Instances, Features:",data.shape)
