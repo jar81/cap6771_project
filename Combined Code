@@ -44,8 +44,9 @@ df_csv.to_sql("baseball", con=engine, if_exists="replace", index=False)
 pd.read_sql("SHOW TABLES", engine) # Confirm dataset loaded in MySQL
 pd.read_sql("SELECT COUNT(*) AS total_rows FROM baseball", engine)
 
-# Collection; change to loading from MySQL
+# Collection; change to loading from folder to MySQL
 baseball = pd.read_csv("baseball.csv") #Renamed train_clean, remove with MySQL working
+# baseball = pd.read_sql("SELECT * FROM baseball", engine)
 
 # Prepocessing
 
