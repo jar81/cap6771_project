@@ -178,31 +178,6 @@ cv_scores = cross_val_score(
 print("Logistic Regression CV AUC scores:", cv_scores)
 print("Logistic Regression Mean CV AUC:", cv_scores.mean())
 
-# LR-Ridge Model
-ridge_model = LogisticRegression(penalty='l2', max_iter=5000)
-ridge_model.fit(X_train_scaled, y_train)
-ridge_pred= ridge_model.predict(X_test_scaled)
-ridge_prob= ridge_model.predict_proba(X_test_scaled)[:,1]
-
-print("RLR model \n", confusion_matrix(np.ravel(y_test), ridge_pred))
-print("RLR model accuracy:", accuracy_score(np.ravel(y_test), ridge_pred))
-print("RLR model precision:", precision_score(np.ravel(y_test), ridge_pred))
-print("RLR model recall:", recall_score(np.ravel(y_test), ridge_pred))
-print("RLR F1 Score:", f1_score(y_test, ridge_pred))
-print("RLR ROC AUC:", roc_auc_score(y_test, ridge_prob))
-
-# LR-LASSO Model
-lasso_model = LogisticRegression(penalty='l2',solver='liblinear', max_iter=5000)
-lasso_model.fit(X_train_scaled, y_train)
-lasso_pred= lasso_model.predict(X_test_scaled)
-lasso_prob= lasso_model.predict_proba(X_test_scaled)[:,1]
-
-print("LLR model \n", confusion_matrix(np.ravel(y_test), lasso_pred))
-print("LLR model accuracy:", accuracy_score(np.ravel(y_test), lasso_pred))
-print("LLR model precision:", precision_score(np.ravel(y_test), lasso_pred))
-print("LLR model recall:", recall_score(np.ravel(y_test), lasso_pred))
-print("LLR F1 Score:", f1_score(y_test, lasso_pred))
-print("LLR ROC AUC:", roc_auc_score(y_test, lasso_prob))
 
 
 # Random Forest Model
