@@ -1,0 +1,491 @@
+# Required for adding MySQL needed libraries
+import sys
+'''
+!python3 -m pip install mysql-connector-python sqlalchemy pandas
+!python3 -m pip install mysql-connector-python
+!{sys.executable} -m pip install mysql-connector-python
+'''
+import os
+import pandas as pd
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+import mysql.connector as sql
+
+from sqlalchemy import create_engine
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVC # For SVM
+from sklearn.ensemble import RandomForestClassifier # For Random Forest
+from sklearn.inspection import permutation_importance
+from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import confusion_matrix, accuracy_score, classification_report 
+from sklearn.metrics import roc_curve, auc, precision_score, recall_score, f1_score
+from sklearn.metrics import roc_auc_score
+'''
+END OF CELL
+'''
+
+
+
+'''
+START OF CELL
+'''
+# Connecting to MySQL and loading data into database
+conn = sql.connect(
+    host="localhost",
+    user="root",
+    password="",
+    database="cap6771",
+)
+
+print(conn.is_connected())
+
+engine = create_engine("mysql+mysqlconnector://root:@localhost/cap6771")
+
+# Getting training dataset and loading to MySQL
+df_csv = pd.read_csv("/Users/luismadrigal/Downloads/archive/train.csv") 
+df_csv.to_sql("baseball", con=engine, if_exists="replace", index=False)
+
+# Getting testing dataset and loading to MySQL
+df_test = pd.read_csv("/Users/luismadrigal/Downloads/archive/test.csv")
+df_test.to_sql("test", con=engine, if_exists="replace", index=False)
+
+# Getting park dataset and loading to MySQL
+df_park = pd.read_csv("/Users/luismadrigal/Downloads/archive/park_dimensions.csv")
+df_park.to_sql("park_dimensions", con=engine, if_exists="replace", index=False)
+
+# Verifying dataset loaded into MySQL
+pd.read_sql("SHOW TABLES", engine) 
+pd.read_sql("SELECT COUNT(*) AS total_rows FROM baseball", engine)
+conn.close()
+'''
+END OF CELL
+'''
+
+
+
+'''
+START OF CELL
+'''
+# Data Collection
+baseball = pd.read_sql("SELECT * FROM baseball", engine)
+data = pd.read_sql("SELECT * FROM baseball", engine)
+'''
+END OF CELL
+'''
+
+
+'''
+START OF CELL
+'''
+# Data Prepocessing
+
+# Removing instances with missing values in key features
+baseball = baseball.dropna(subset=["launch_speed","launch_angle"]).copy()
+
+# Replacing NULL values
+baseball["bb_type"] = baseball["bb_type"].fillna("Unknown")
+
+# Dropping low variance and high cardinality columns
+dropped_low_variance = []
+dropped_high_cardinality = []
+
+for col in baseball.columns:
+    if baseball[col].nunique() <= 1:
+        dropped_low_variance.append(col)
+
+for col in baseball.columns:
+    if baseball[col].nunique() == len(baseball):
+        dropped_high_cardinality.append(col)
+
+# Dropping first set of columns
+baseball = baseball.drop(columns=dropped_low_variance + dropped_high_cardinality)
+print("Low variance dropped:", dropped_low_variance)
+print("High cardinality dropped:", dropped_high_cardinality)
+
+# Dropping second set of columns
+cols_to_drop = ["bip_id", "batter_id", "pitcher_id", "batter_name", "pitcher_name"]
+baseball = baseball.drop(columns=cols_to_drop, errors="ignore")
+
+# Input and Output Data
+X = baseball.drop(columns=["is_home_run"])
+y = baseball["is_home_run"]
+
+# One-Hot Encoding (required for SVM and Random Forest)
+X = pd.get_dummies(X,drop_first=True)
+
+# Split 70% train, 30% test
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.3, random_state=42, stratify=y
+)
+
+# Standardization (required for SVM and Logistic Regression)
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+'''
+END OF CELL
+'''
+
+
+'''
+START OF CELL
+'''
+# Data Exploration
+print("Original Data:\n",data.head())
+print(data.info())
+print("Original Instances, Features:",data.shape)
+print("Original Duplicates:",data.duplicated().sum())
+print("Original Nulls:\n",data.isna().sum())
+
+print("\nProcessed Data:")
+print(baseball.info()) # Showing modified/processed data 
+print(baseball.describe())
+print("Instances, Features:",baseball.shape)
+print("Duplicates:",baseball.duplicated().sum())
+print("Nulls:\n",baseball.isna().sum())
+
+# Visualizing data
+sns.countplot(x='is_home_run', data=baseball)
+plt.title("Distribution of Home Runs (Target Variable)")
+plt.show()
+
+sns.boxplot(x='is_home_run', y='launch_speed', data=baseball)
+plt.title("Launch Speed vs Home Run Outcome")
+plt.show()
+
+sns.scatterplot(
+    x='launch_speed',
+    y='launch_angle',
+    hue='is_home_run',
+    data=baseball
+)
+plt.title("Launch Speed vs Launch Angle (Class Separation)")
+plt.show()
+
+# Correlation
+corr_matrix = data.corr(numeric_only=True)
+corr_matrix
+
+# Feature Distribution
+sns.histplot(data["launch_speed"], bins=30, kde=True)
+plt.title("Launch Speed Distribution")
+plt.show()
+
+# Feature Counts
+sns.countplot(x="bb_type", data=data)
+plt.xticks(rotation=45)
+plt.title("Batted Ball Type Counts")
+plt.show()
+
+# Violin Plot (Launch vs Home)
+sns.violinplot(x="is_home_run", y="launch_speed", data=data)
+plt.title("Launch Speed vs Home Run")
+plt.show()
+
+# Missing value heatmap
+data.isnull().sum()
+(data.isnull().sum() / len(data)) * 100
+sns.heatmap(data.isnull(), cbar=False)
+plt.title("Missing Values Heatmap")
+plt.show()
+
+# Correlation heatmap
+plt.figure(figsize=(10,8))
+sns.heatmap(data.corr(numeric_only=True), annot=False, cmap="coolwarm")
+plt.title("Correlation Heatmap")
+plt.show()
+
+# Density plot
+# Filter only home runs
+hr_data = data[data["is_home_run"] == 1]
+
+plt.figure(figsize=(8,6))
+
+sns.histplot(
+    data=hr_data,
+    x="plate_x",
+    y="plate_z",
+    bins=30,
+    cmap="Reds",
+    cbar=True
+)
+
+plt.title("Home Run Density by Pitch Location")
+plt.xlabel("Plate X (Horizontal)")
+plt.ylabel("Plate Z (Vertical)")
+plt.show()
+'''
+END OF CELL
+'''
+
+
+'''
+START OF CELL
+'''
+# SVM Model
+# kernels, class_weight, random_state
+svmModel = SVC(kernel='rbf', class_weight='balanced', random_state=42)
+svmModel.fit(X_train_scaled, y_train)
+
+# Parameter Summary
+model_summary = pd.DataFrame({
+    "Parameter": ["Kernel", "C", "Gamma", "Class Weight", "Support Vectors"],
+    "Value": [
+        svmModel.kernel,
+        svmModel.C,
+        svmModel.gamma,
+        svmModel.class_weight,
+        len(svmModel.support_)
+    ]
+})
+
+# SVM Prediction
+y_pred = svmModel.predict(X_test_scaled)
+
+# SVM Performance Metrics
+print("SVM Summary and Performance\n")
+print(model_summary)
+
+# SVM Confusion Matrix
+conf_matrix = confusion_matrix(y_test, y_pred)
+print("Confusion Matrix:\n",conf_matrix)
+
+# SVM Accuracy
+print("Accuracy:",accuracy_score(y_test, y_pred))
+
+# SVM Classification
+print("Report:\n",classification_report(y_test,y_pred))
+
+# SVM ROC and AUC
+y_scores = svmModel.decision_function(X_test_scaled)
+fpr, tpr, _ = roc_curve(y_test, y_scores)
+roc_auc = auc(fpr, tpr)
+
+#SVM ROC/AUC Plot
+plt.plot(fpr, tpr, label=f"AUC = {roc_auc:.2f}")
+plt.plot([0,1], [0,1], '--')
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.title("ROC Curve (SVM)")
+plt.legend()
+plt.show()
+
+# SVM Cross Validation
+CVscores = cross_val_score(svmModel, X_train_scaled, y_train, cv=5)
+
+# SVM Results
+print("CV Scores:", CVscores)
+print("CV Mean:", CVscores.mean())
+
+
+# Unbalanced SVM (RBF kernel, no class weights)
+svm_unbalanced = SVC(kernel='rbf', class_weight=None, random_state=42)
+svm_unbalanced.fit(X_train_scaled, y_train)
+
+y_pred_unbalanced = svm_unbalanced.predict(X_test_scaled)
+
+print("\nUNBALANCED SVM (RBF)")
+print("Accuracy:", accuracy_score(y_test, y_pred_unbalanced))
+print("Precision:", precision_score(y_test, y_pred_unbalanced))
+print("Recall:", recall_score(y_test, y_pred_unbalanced))
+print("F1-Score:", f1_score(y_test, y_pred_unbalanced))
+print("Confusion Matrix:\n", confusion_matrix(y_test, y_pred_unbalanced))
+print(classification_report(y_test, y_pred_unbalanced))
+
+y_scores_unbalanced = svm_unbalanced.decision_function(X_test_scaled)
+fpr_unbalanced, tpr_unbalanced, _ = roc_curve(y_test, y_scores_unbalanced)
+auc_unbalanced = auc(fpr_unbalanced, tpr_unbalanced)
+
+plt.figure(figsize=(6,5))
+plt.plot(fpr_unbalanced, tpr_unbalanced, label=f"AUC = {auc_unbalanced:.2f}")
+plt.plot([0,1], [0,1], '--')
+plt.title("ROC Curve - SVM Unbalanced (RBF)")
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.legend()
+plt.show()
+'''
+END OF CELL
+'''
+
+
+'''
+START OF CELL
+'''
+# Logistic Regression Model
+logModel= LogisticRegression(penalty=None, max_iter=5000, class_weight='balanced')
+logModel.fit(X_train_scaled, np.ravel(y_train))
+
+# Identifying most/least important features
+features= X.columns
+coef= logModel.coef_[0]
+
+importance= pd.DataFrame({
+    'feature': features,
+    'coef': coef
+        }).sort_values(by='coef', ascending=False)
+
+print("Most Important Features:\n",importance.head(10))
+print("\nLeast Important Features:\n",importance.tail(10))
+
+# Predictions
+log_pred= logModel.predict(X_test_scaled)
+log_prob= logModel.predict_proba(X_test_scaled)[:,1]
+
+# Performance Metrics
+print("Logistic Regression Performance\nConfusion Matrix:\n", confusion_matrix(np.ravel(y_test), log_pred))
+print("Accuracy:", accuracy_score(np.ravel(y_test), log_pred))
+print("Precision:", precision_score(np.ravel(y_test), log_pred))
+print("Recall:", recall_score(np.ravel(y_test), log_pred))
+print("F1 Score:", f1_score(y_test, log_pred))
+print("ROC AUC:", roc_auc_score(y_test, log_prob))
+
+# Cross Validation Scoring
+cv_scores = cross_val_score(
+    logModel,
+    X_train_scaled,
+    y_train,
+    cv=5,
+    scoring='roc_auc'
+)
+print("CV AUC scores:", cv_scores)
+print("Mean CV AUC:", cv_scores.mean())
+
+# ROC Curve
+fpr, tpr, _ = roc_curve(y_test, log_prob)
+plt.plot(fpr, tpr)
+plt.plot([0,1],[0,1],'--')
+plt.title("ROC Curve - Logistic Regression (Balanced)")
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.show()
+'''
+END OF CELL
+'''
+
+
+'''
+START OF CELL
+'''
+# Random Forest
+
+# Base Model
+base_rfModel = RandomForestClassifier()
+base_rfModel.fit(X_train,y_train) 
+
+# Base Random Forest Classification
+rfpredtrain = base_rfModel.predict(X_train)
+print("Random Forest Base Report (Train Data):\n",classification_report(y_train,rfpredtrain))
+rfpredtest = base_rfModel.predict(X_test)
+print("Random Forest Base Report (Test Data):\n",classification_report(y_test,rfpredtest))
+
+# Base Random Forest with best params to get feature importance
+important_features = pd.DataFrame(
+    data={"feature": base_rfModel.feature_names_in_,"importance": base_rfModel.feature_importances_,}
+).sort_values("importance", ascending=False)
+print(important_features.head(10))
+'''
+END OF CELL
+'''
+
+
+'''
+START OF CELL
+'''
+# Random Forest Tuning Grid
+
+# Chosen Parameters
+# n_estimators (100), any number 
+# criterion (class ="gini" reg="squared_error"),
+    # class = "entropy", "log_loss"
+    # reg = "absolute_error", "friedman_mse", "poisson"
+# random_state (None), any number
+# max_depth (None), None = prune based on min_samples_split, any number
+# min_samples_split (2), any number or float
+# max_features ("sqrt"), any number, "log2"
+
+rf = {"n_estimators":[1,5,10,100],
+     "criterion":["gini","entropy","log_loss"],
+     "max_depth":[1,5,10],
+     "min_samples_split":[2,5,10],
+     "max_features":["sqrt","log2"],
+     "random_state": [123]}
+
+# Random Forest Tuning
+rfTuning = GridSearchCV(RandomForestClassifier(),rf, cv=5)
+rfTuning.fit(X_train,y_train)
+
+print("Random Forest Tuning Results:\n", rfTuning.cv_results_.keys(),"\n")
+print("Random Forest Best Estimator:\n",rfTuning.best_estimator_,"\n")
+'''
+END OF CELL
+'''
+
+
+'''
+START OF CELL
+'''
+# Remove random_state for test data/prediction
+# max_depth=10, n_estimators=5, random_state=123
+
+param_rfModel = RandomForestClassifier(max_depth=10,n_estimators=5,random_state=123) # Best Params
+param_rfModel.fit(X_train,y_train)
+
+# Random Forest Classification
+rfpredtrain = param_rfModel.predict(X_train)
+print("Random Forest Param Report (Train Data):\n",classification_report(y_train,rfpredtrain))
+rfpredtest = param_rfModel.predict(X_test)
+print("Random Forest Param Report (Test Data):\n",classification_report(y_test,rfpredtest))
+
+# Random Forest with best params to get feature importance
+important_features = pd.DataFrame(
+    data={"feature": param_rfModel.feature_names_in_,"importance": param_rfModel.feature_importances_,}
+).sort_values("importance", ascending=False)
+
+# Importance Plot of Top 10
+plt.barh(important_features.head(10).feature, important_features.head(10).importance)
+plt.xlabel('Importance')
+plt.ylabel('Feature')
+plt.title("Feature Importance (Random Forest)")
+plt.show()
+'''
+END OF CELL
+'''
+
+
+'''
+START OF CELL
+'''
+# Random Forest with Important Features and Best Parameters
+X_feat_train = X_train[["launch_angle","launch_speed"]]
+X_feat_test = X_test[["launch_angle","launch_speed"]]
+
+combo_rfModel = RandomForestClassifier(max_depth=10,n_estimators=5) # Best Params
+combo_rfModel.fit(X_feat_train,y_train)
+
+rfpredtest = combo_rfModel.predict(X_feat_test)
+rfpredtrain = combo_rfModel.predict(X_feat_train)
+print("Random Forest OPT Report (Train Data):\n",classification_report(y_train,rfpredtrain))
+print("Random Forest OPT Report (Test Data):\n",classification_report(y_test,rfpredtest))
+
+print("Random Forest OPT Confusion:\n", confusion_matrix(np.ravel(y_test), rfpredtest))
+
+rf_prob = combo_rfModel.predict_proba(X_feat_test)[:,1]
+
+print("Random Forest OPT ROC AUC:", roc_auc_score(y_test, rf_prob))
+
+fpr, tpr, _ = roc_curve(y_test, rf_prob)
+
+plt.plot(fpr, tpr, label=f"AUC = {auc(fpr, tpr):.2f}")
+plt.plot([0,1],[0,1],'--')
+plt.title("ROC Curve - Random Forest OPT")
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.legend()
+plt.show()
+'''
+END OF CELL
+'''
